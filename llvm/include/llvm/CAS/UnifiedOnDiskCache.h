@@ -11,6 +11,7 @@
 
 #include "llvm/CAS/BuiltinUnifiedCASDatabases.h"
 #include "llvm/CAS/OnDiskGraphDB.h"
+#include "llvm/Support/Compiler.h"
 #include <atomic>
 
 namespace llvm::cas::ondisk {
@@ -87,7 +88,7 @@ public:
   /// was invalid but has been cleared, \c Skipped if validation is not needed,
   /// or an \c Error if validation cannot be performed or if the data is left
   /// in an invalid state because \p AllowRecovery is false.
-  static Expected<ValidationResult>
+  LLVM_ABI static Expected<ValidationResult>
   validateIfNeeded(StringRef Path, StringRef HashName, unsigned HashByteSize,
                    bool CheckHash, bool AllowRecovery, bool ForceValidation,
                    std::optional<StringRef> LLVMCasBinary);
@@ -131,7 +132,7 @@ public:
   collectGarbage(StringRef Path, ondisk::OnDiskCASLogger *Logger = nullptr);
 
   /// Remove unused data from the current UnifiedOnDiskCache.
-  Error collectGarbage();
+  LLVM_ABI Error collectGarbage();
 
   /// Helper function to convert the value stored in KeyValueDB and ObjectID.
   LLVM_ABI_FOR_TEST static ObjectID getObjectIDFromValue(ArrayRef<char> Value);

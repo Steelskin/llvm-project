@@ -16,11 +16,12 @@
 #define LLVM_DEBUGINFOD_DIFETCHER_H
 
 #include "llvm/Object/BuildID.h"
+#include "llvm/Support/Compiler.h"
 #include <optional>
 
 namespace llvm {
 
-class DebuginfodFetcher : public object::BuildIDFetcher {
+class LLVM_ABI DebuginfodFetcher : public object::BuildIDFetcher {
 public:
   DebuginfodFetcher(std::vector<std::string> DebugFileDirectories)
       : BuildIDFetcher(std::move(DebugFileDirectories)) {}
