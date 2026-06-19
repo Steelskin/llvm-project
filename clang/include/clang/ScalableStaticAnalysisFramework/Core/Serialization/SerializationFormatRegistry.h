@@ -84,6 +84,6 @@ using SerializationFormatRegistry = llvm::Registry<SerializationFormat>;
 
 } // namespace clang::ssaf
 
-LLVM_DECLARE_REGISTRY(clang::ssaf::SerializationFormatRegistry)
+LLVM_DECLARE_REGISTRY_EX(CLANG_ABI_EXPORT, clang::ssaf::SerializationFormatRegistry)
 
 #endif // LLVM_CLANG_SCALABLESTATICANALYSISFRAMEWORK_CORE_SERIALIZATION_SERIALIZATIONFORMATREGISTRY_H

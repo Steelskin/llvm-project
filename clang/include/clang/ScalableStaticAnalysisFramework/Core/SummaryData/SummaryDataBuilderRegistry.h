@@ -23,11 +23,13 @@
 #define LLVM_CLANG_SCALABLESTATICANALYSISFRAMEWORK_CORE_SUMMARYDATA_SUMMARYDATABUILDERREGISTRY_H
 
 #include "clang/ScalableStaticAnalysisFramework/Core/SummaryData/SummaryDataBuilder.h"
+#include "clang/Support/Compiler.h"
 #include "llvm/Support/Registry.h"
 #include <memory>
 #include <string>
 
-LLVM_DECLARE_REGISTRY(llvm::Registry<clang::ssaf::SummaryDataBuilderBase>)
+LLVM_DECLARE_REGISTRY_EX(CLANG_ABI_EXPORT,
+                         llvm::Registry<clang::ssaf::SummaryDataBuilderBase>)
 
 namespace clang::ssaf {
 

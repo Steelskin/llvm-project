@@ -35,13 +35,14 @@
 #include "clang/ScalableStaticAnalysisFramework/Core/WholeProgramAnalysis/AnalysisName.h"
 #include "clang/ScalableStaticAnalysisFramework/Core/WholeProgramAnalysis/DerivedAnalysis.h"
 #include "clang/ScalableStaticAnalysisFramework/Core/WholeProgramAnalysis/SummaryAnalysis.h"
+#include "clang/Support/Compiler.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/Registry.h"
 #include <memory>
 #include <string>
 #include <vector>
 
-LLVM_DECLARE_REGISTRY(llvm::Registry<clang::ssaf::AnalysisBase>)
+LLVM_DECLARE_REGISTRY_EX(CLANG_ABI_EXPORT, llvm::Registry<clang::ssaf::AnalysisBase>)
 
 namespace clang::ssaf {
 

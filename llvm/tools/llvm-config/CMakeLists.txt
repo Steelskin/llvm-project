@@ -15,6 +15,12 @@ add_llvm_tool(llvm-config
   # want to build an entire native libLLVM.so in addition to the cross one just
   # for the native `llvm-config`!
   DISABLE_LLVM_LINK_LLVM_DYLIB
+  # This tool defines CMAKE_CFG_INTDIR (below) directly on its compile line, which
+  # a shared LLVM PCH is not built with -- reusing one trips clang-cl's
+  # -Wclang-cl-pch on the predefines mismatch (cf. the -fmodules-ignore-macro
+  # workaround for the modules build just below). It's a single small TU, so just
+  # opt out of PCH reuse.
+  DISABLE_PCH_REUSE
   )
 
 # Compute the substitution values for various items.
