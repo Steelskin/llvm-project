@@ -1,8 +1,14 @@
 set(LLVM_LINK_COMPONENTS Support)
 
+clang_get_abi_definition(clang_abi_def EXECUTABLE)
+set(clang_pch_abi_arg "")
+if(clang_abi_def)
+  set(clang_pch_abi_arg PCH_ABI_DEFINITION ${clang_abi_def})
+endif()
 add_tablegen(clang-tblgen CLANG
   DESTINATION "${CLANG_TOOLS_INSTALL_DIR}"
   EXPORT Clang
+  ${clang_pch_abi_arg}
   ASTTableGen.cpp
   CIRLoweringEmitter.cpp
   ClangASTNodesEmitter.cpp

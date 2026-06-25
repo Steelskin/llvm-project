@@ -45,6 +45,44 @@ macro(add_clang_subdirectory name)
   add_llvm_subdirectory(CLANG TOOL ${name})
 endmacro()
 
+# clang_get_abi_definition(<out_var> <kind>)
+#
+# Store the ABI-defining macro that a clang target of <kind> is compiled with
+# into <out_var>, or the empty string if it carries none. This is the single
+# source for both the compile definition the target receives and the PCH key
+# derived from it, so the two can never drift apart.
+#
+#   <out_var>
+#     The variable where the macro name is stored.
+#   <kind>
+#     The kind of clang target being declared, one of:
+#       COMPONENT_LIBRARY  A library linked into clang-cpp. That is, one
+#                          declared without SHARED or STATIC.
+#       LIBRARY            A standalone SHARED or STATIC clang library.
+#       EXECUTABLE         An executable, including tablegen tools.
+#       MODULE             A loadable module, such as an analyzer plugin.
+function(clang_get_abi_definition out_var kind)
+  set(known_kinds COMPONENT_LIBRARY LIBRARY EXECUTABLE MODULE)
+  if(NOT kind IN_LIST known_kinds)
+    message(FATAL_ERROR
+      "clang_get_abi_definition: unknown clang target kind '${kind}'")
+  endif()
+
+  # CLANG_ABI only consults these on Windows (clang/Support/Compiler.h); the
+  # ELF and Mach-O branches annotate unconditionally.
+  set(definition "")
+  if(WIN32 AND NOT MINGW)
+    if(NOT CLANG_LINK_CLANG_DYLIB)
+      # Make sure all consumers also turn off visibility macros so they're not
+      # trying to dllimport symbols.
+      set(definition CLANG_BUILD_STATIC)
+    elseif(kind STREQUAL "COMPONENT_LIBRARY")
+      set(definition CLANG_EXPORTS)
+    endif()
+  endif()
+  set(${out_var} "${definition}" PARENT_SCOPE)
+endfunction()
+
 macro(add_clang_library name)
   cmake_parse_arguments(ARG
     "SHARED;STATIC;INSTALL_WITH_TOOLCHAIN"
@@ -106,18 +144,30 @@ macro(add_clang_library name)
     endif()
     set_property(GLOBAL APPEND PROPERTY CLANG_STATIC_LIBS ${name})
   endif()
-  llvm_add_library(${name} ${LIBTYPE} ${ARG_UNPARSED_ARGUMENTS} ${srcs})
 
-  if((WIN32 AND NOT MINGW) AND NOT CLANG_LINK_CLANG_DYLIB)
-    # Make sure all consumers also turn off visibility macros so they're not
-    # trying to dllimport symbols.
-    target_compile_definitions(${name} PUBLIC CLANG_BUILD_STATIC)
+  if(ARG_SHARED OR ARG_STATIC)
+    set(clang_target_kind LIBRARY)
+  else()
+    set(clang_target_kind COMPONENT_LIBRARY)
+  endif()
+  clang_get_abi_definition(clang_abi_def ${clang_target_kind})
+  set(clang_pch_abi_arg "")
+  if(clang_abi_def)
+    set(clang_pch_abi_arg PCH_ABI_DEFINITION ${clang_abi_def})
+  endif()
+  llvm_add_library(${name} ${LIBTYPE} ${clang_pch_abi_arg}
+                   ${ARG_UNPARSED_ARGUMENTS} ${srcs})
+
+  if(clang_abi_def)
     if(TARGET "obj.${name}")
-      target_compile_definitions("obj.${name}" PUBLIC CLANG_BUILD_STATIC)
+      target_compile_definitions("obj.${name}" PUBLIC ${clang_abi_def})
     endif()
-  elseif(TARGET "obj.${name}" AND NOT ARG_SHARED AND NOT ARG_STATIC)
-    # Clang component libraries linked to clang-cpp are declared without SHARED or STATIC
-    target_compile_definitions("obj.${name}" PUBLIC CLANG_EXPORTS)
+    # Consumers must see CLANG_BUILD_STATIC too, so they do not try to dllimport
+    # symbols. CLANG_EXPORTS applies only to the translation units compiled into
+    # clang-cpp, so it stays on the object library.
+    if(clang_abi_def STREQUAL "CLANG_BUILD_STATIC")
+      target_compile_definitions(${name} PUBLIC ${clang_abi_def})
+    endif()
   endif()
 
   set(libs ${name})
@@ -157,7 +207,12 @@ macro(add_clang_library name)
 endmacro(add_clang_library)
 
 macro(add_clang_executable name)
-  add_llvm_executable( ${name} ${ARGN} )
+  clang_get_abi_definition(clang_abi_def EXECUTABLE)
+  set(clang_pch_abi_arg "")
+  if(clang_abi_def)
+    set(clang_pch_abi_arg PCH_ABI_DEFINITION ${clang_abi_def})
+  endif()
+  add_llvm_executable( ${name} ${clang_pch_abi_arg} ${ARGN} )
   set_clang_windows_version_resource_properties(${name})
   set_target_properties(${name} PROPERTIES XCODE_GENERATE_SCHEME ON)
 endmacro(add_clang_executable)

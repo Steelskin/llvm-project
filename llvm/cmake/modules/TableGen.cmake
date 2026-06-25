@@ -180,12 +180,23 @@ function(add_public_tablegen_target target)
 endfunction()
 
 macro(add_tablegen target project)
-  cmake_parse_arguments(ADD_TABLEGEN "" "DESTINATION;EXPORT" "" ${ARGN})
+  cmake_parse_arguments(ADD_TABLEGEN "" "DESTINATION;EXPORT;PCH_ABI_DEFINITION" "" ${ARGN})
 
   set(${target}_OLD_LLVM_LINK_COMPONENTS ${LLVM_LINK_COMPONENTS})
   set(LLVM_LINK_COMPONENTS ${LLVM_LINK_COMPONENTS} TableGen)
 
-  add_llvm_executable(${target} DISABLE_LLVM_LINK_LLVM_DYLIB
+  # A tablegen tool that links another project's libraries inherits that
+  # project's ABI-defining macros. Forward the caller's PCH_ABI_DEFINITION so
+  # the tool reuses a PCH variant compiled with the same predefines.
+  set(pch_abi_definition_arg "")
+  if(ADD_TABLEGEN_PCH_ABI_DEFINITION)
+    set(pch_abi_definition_arg
+      PCH_ABI_DEFINITION "${ADD_TABLEGEN_PCH_ABI_DEFINITION}")
+  endif()
+  add_llvm_executable(${target}
+    DISABLE_LLVM_LINK_LLVM_DYLIB
+    PCH_GEN_CHAIN_TOOL
+    ${pch_abi_definition_arg}
     ${ADD_TABLEGEN_UNPARSED_ARGUMENTS})
   set(LLVM_LINK_COMPONENTS ${${target}_OLD_LLVM_LINK_COMPONENTS})
 
