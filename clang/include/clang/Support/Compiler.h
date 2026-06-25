@@ -14,6 +14,7 @@
 #ifndef CLANG_SUPPORT_COMPILER_H
 #define CLANG_SUPPORT_COMPILER_H
 
+#include "clang/Config/clang-config.h"
 #include "llvm/Support/Compiler.h"
 
 /// CLANG_ABI is the main export/visibility macro to mark something as
@@ -40,7 +41,12 @@
 // in the build so can't depend on the llvm shared library. If export macros
 // were left enabled when building these we would get duplicate or
 // missing symbol linker errors on windows.
-#if defined(CLANG_BUILD_STATIC)
+//
+// CLANG_ENABLE_CLANG_EXPORT_ANNOTATIONS comes from clang/Config/clang-config.h.
+// When it is not defined, clang is only ever linked statically, so no target
+// needs to define CLANG_BUILD_STATIC.
+#if defined(CLANG_BUILD_STATIC) ||                                             \
+    !defined(CLANG_ENABLE_CLANG_EXPORT_ANNOTATIONS)
 #define CLANG_ABI
 #define CLANG_ABI_EXPORT
 #define CLANG_TEMPLATE_ABI
