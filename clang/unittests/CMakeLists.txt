@@ -34,7 +34,17 @@ function(add_distinct_clang_unittest test_name)
   # add_unittest.
   list(APPEND LLVM_LINK_COMPONENTS ${ARG_LLVM_COMPONENTS})
 
-  add_unittest(ClangUnitTests ${test_name} ${ARG_UNPARSED_ARGUMENTS})
+  # These link clang libraries and so inherit clang's ABI define, but they are
+  # created through add_unittest rather than add_clang_executable, so the PCH
+  # key has to be applied by hand.
+  clang_get_abi_definition(clang_abi_def EXECUTABLE)
+  set(clang_pch_abi_arg "")
+  if(clang_abi_def)
+    set(clang_pch_abi_arg PCH_ABI_DEFINITION ${clang_abi_def})
+  endif()
+
+  add_unittest(ClangUnitTests ${test_name} ${clang_pch_abi_arg}
+               ${ARG_UNPARSED_ARGUMENTS})
 
   # Clang libs either come from the entire dylib, or individual libraries.
   if (CLANG_LINK_CLANG_DYLIB)

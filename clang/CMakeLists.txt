@@ -370,6 +370,23 @@ if (NOT LLVM_LINK_LLVM_DYLIB AND CLANG_LINK_CLANG_DYLIB)
                       "LLVM_LINK_LLVM_DYLIB=OFF")
 endif()
 
+# Whether CLANG_ABI and related macros annotate clang's public interface. This
+# is recorded in clang/Config/clang-config.h rather than passed on the command
+# line, so that it does not need to be defined by every target (and consumer)
+# of the clang libraries.
+#
+# On Windows the annotations are dllexport/dllimport attributes, which are only
+# correct when tools link against the clang shared library. Elsewhere they are
+# visibility attributes, which are always enabled.
+#
+# This is derived rather than a separate option: once the clang shared library
+# is supported on Windows, it should follow LLVM_ENABLE_LLVM_EXPORT_ANNOTATIONS.
+if((WIN32 AND NOT MINGW) AND NOT CLANG_LINK_CLANG_DYLIB)
+  set(CLANG_ENABLE_CLANG_EXPORT_ANNOTATIONS OFF)
+else()
+  set(CLANG_ENABLE_CLANG_EXPORT_ANNOTATIONS ON)
+endif()
+
 # The libdir suffix must exactly match whatever LLVM's configuration used.
 set(CLANG_LIBDIR_SUFFIX "${LLVM_LIBDIR_SUFFIX}")
 
@@ -1027,3 +1044,6 @@ set(CLANG_INSTALL_LIBDIR_BASENAME "lib${CLANG_LIBDIR_SUFFIX}")
 configure_file(
   ${CLANG_SOURCE_DIR}/include/clang/Config/config.h.cmake
   ${CLANG_BINARY_DIR}/include/clang/Config/config.h)
+configure_file(
+  ${CLANG_SOURCE_DIR}/include/clang/Config/clang-config.h.cmake
+  ${CLANG_BINARY_DIR}/include/clang/Config/clang-config.h)
