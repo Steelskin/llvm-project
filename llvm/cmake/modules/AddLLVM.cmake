@@ -79,7 +79,157 @@ function(llvm_update_compile_flags name)
   target_compile_definitions(${name} PRIVATE ${LLVM_COMPILE_DEFINITIONS})
 endfunction()
 
-function(llvm_update_pch name)
+# llvm_get_abi_definition(<out_var> <kind>)
+#
+# Store the ABI-defining macro that an LLVM target of <kind> is compiled with
+# into <out_var>, or the empty string if it carries none. This is the single
+# source for both the compile definition the target receives and the PCH key
+# derived from it, so the two can never drift apart.
+#
+# Reads ARG_COMPONENT_LIB / ARG_DISABLE_LLVM_LINK_LLVM_DYLIB from the calling
+# scope, so it must be called from a helper that has parsed them.
+#
+#   <out_var>
+#     The variable where the macro name is stored.
+#   <kind>
+#     The target's category for export-mode purposes: lib, objlib or exe.
+function(llvm_get_abi_definition out_var kind)
+  # How LLVM_ABI resolves in the target's translation units:
+  #   -DLLVM_EXPORTS      -> dllexport      (dylib component libraries)
+  #   -DLLVM_BUILD_STATIC -> (no annotation)
+  #   neither             -> dllimport
+  # When annotations are disabled every reader of these macros is disabled too,
+  # so defining them would be noise that only desyncs PCH predefine sets.
+  set(definition "")
+  if(LLVM_ENABLE_LLVM_EXPORT_ANNOTATIONS)
+    if(kind STREQUAL "lib")
+      if(ARG_COMPONENT_LIB AND (LLVM_BUILD_LLVM_DYLIB OR BUILD_SHARED_LIBS))
+        set(definition LLVM_EXPORTS)
+      elseif(NOT ARG_COMPONENT_LIB AND ARG_DISABLE_LLVM_LINK_LLVM_DYLIB)
+        set(definition LLVM_BUILD_STATIC)
+      endif()
+    elseif(kind STREQUAL "exe")
+      if(ARG_DISABLE_LLVM_LINK_LLVM_DYLIB OR NOT LLVM_LINK_LLVM_DYLIB)
+        set(definition LLVM_BUILD_STATIC)
+      endif()
+    elseif(ARG_DISABLE_LLVM_LINK_LLVM_DYLIB)
+      # objlib: never receives LLVM_EXPORTS; LLVM_BUILD_STATIC iff disabled.
+      set(definition LLVM_BUILD_STATIC)
+    endif()
+  endif()
+  set(${out_var} "${definition}" PARENT_SCOPE)
+endfunction()
+
+# llvm_reuse_shared_pch_variant(<name> <provider> [<abi_defs>])
+#
+# Make target <name> reuse the shared PCH variant of <provider> built for
+# <abi_defs>, creating that variant if it does not exist yet.
+#
+# A precompiled header can only be reused by translation units compiled with
+# the same preprocessor state, so a target whose ABI defines differ from its
+# PCH provider's cannot REUSE_FROM that provider. Letting every such target
+# build its own PCH does not scale -- it yields hundreds of near-identical
+# PCHs in a dylib build -- so instead one shared "variant" is built per
+# provider and abi defs, and every consumer with the same abi defs reuses it.
+#
+# A variant is an OBJECT library over a single empty source file, so its only
+# products are the PCH and the object that creates it. On MSVC that object must
+# be linked into every image that reuses the PCH, so the variant also registers
+# it with one of the LLVMPCHCollector* libraries (see llvm/CMakeLists.txt).
+#
+#   <name>
+#     The consumer target that will REUSE_FROM the variant.
+#   <provider>
+#     The target whose PCH this variant stands in for. It supplies the header
+#     to precompile (its LLVM_PCH_HEADER property) and names the variant, so
+#     that variants for providers precompiling different headers never collide.
+#     If it recorded no header, no PCH is used and the call does nothing.
+#   <abi_defs>
+#     The ABI-defining macros the variant is compiled with, as computed by
+#     `llvm_update_pch()`. Its preprocessor state then matches the consumers
+#     that will reuse it, and the defines also name the variant, keeping
+#     variants of one provider built for different defines apart.
+function(llvm_reuse_shared_pch_variant name provider abi_defs)
+  get_target_property(pch_header ${provider} LLVM_PCH_HEADER)
+  if(NOT pch_header)
+    message(DEBUG "Using NO PCH for ${name} (provider recorded no header)")
+    return()
+  endif()
+
+  # Name the variant after the defines it carries. A target name cannot end in
+  # "_pch_", so the empty set needs a placeholder.
+  if(abi_defs)
+    string(REPLACE ";" "_" defs_id "${abi_defs}")
+    string(MAKE_C_IDENTIFIER "${defs_id}" defs_id)
+  else()
+    set(defs_id "none")
+  endif()
+  set(variant "${provider}_pch_${defs_id}")
+  if(NOT TARGET ${variant})
+    set(empty_tu "${CMAKE_BINARY_DIR}/CMakeFiles/llvm_pch_variant_empty.cpp")
+    file(CONFIGURE OUTPUT "${empty_tu}" CONTENT
+         "// Intentionally empty; carries the shared PCH object.\n")
+    add_library(${variant} OBJECT EXCLUDE_FROM_ALL "${empty_tu}")
+    llvm_update_compile_flags(${variant})
+
+    # The consumer's ABI defines, verbatim: the PCH must be compiled with the
+    # same preprocessor state as the translation units that will reuse it.
+    if(abi_defs)
+      target_compile_definitions(${variant} PRIVATE ${abi_defs})
+    endif()
+
+    # In a clang-cl dylib build every real target is compiled with
+    # /Zc:dllexportInlines-. clang-cl bakes this setting into the PCH and
+    # refuses to reuse it on mismatch, so the variant must carry it too.
+    if(LLVM_BUILD_LLVM_DYLIB AND NOT LLVM_DYLIB_EXPORT_INLINES AND
+       MSVC AND CMAKE_CXX_COMPILER_ID MATCHES Clang)
+      target_compile_options(${variant} PRIVATE /Zc:dllexportInlines-)
+    endif()
+    target_precompile_headers(${variant} PRIVATE
+      $<$<COMPILE_LANGUAGE:CXX>:${pch_header}>)
+
+    # The variant compiles the provider's header, which may pull in generated
+    # headers. Inherit the provider's explicit dependencies so they are
+    # generated before the variant's PCH.
+    get_target_property(provider_deps ${provider} MANUALLY_ADDED_DEPENDENCIES)
+    if(provider_deps)
+      add_dependencies(${variant} ${provider_deps})
+    endif()
+    get_subproject_title(subproject_title)
+    set_target_properties(${variant} PROPERTIES
+                          FOLDER "${subproject_title}/Precompiled Headers")
+
+    # Collect this variant's PCH object so every image that reuses it can obtain
+    # the object that creates the PCH. Route to the post-tablegen collector if
+    # the provider pulls tablegen-generated headers.
+    if(TARGET LLVMPCHCollectorPreTableGen)
+      if(provider_deps)
+        set(_pch_collector LLVMPCHCollectorPostTableGen)
+      else()
+        set(_pch_collector LLVMPCHCollectorPreTableGen)
+      endif()
+      target_sources(${_pch_collector} PRIVATE $<TARGET_OBJECTS:${variant}>)
+    endif()
+  endif()
+
+  message(DEBUG "Reusing shared PCH ${variant} for ${name}")
+  target_precompile_headers(${name} REUSE_FROM ${variant})
+endfunction()
+
+# llvm_update_pch(<name> [<kind>] [<abi_defs>])
+#
+# Update the precompiled-header configuration of target <name> to reuse a PCH
+# from a provider if possible, or build a new one if not.
+#
+#   [<kind>]
+#     The target's category for export-mode purposes: lib, objlib or exe.
+#   [<abi_defs>]
+#     The ABI-defining macros that the target is compiled with. Used to compute
+#     a unique "mode" key for PCH reuse.
+function(llvm_update_pch name kind abi_defs)
+  if(NOT kind)
+    set(kind "lib")
+  endif()
   if(LLVM_REQUIRES_RTTI OR LLVM_REQUIRES_EH)
     # Non-default RTTI/EH results in incompatible flags, precluding PCH reuse.
     set(ARG_DISABLE_PCH_REUSE ON)
@@ -107,6 +257,18 @@ function(llvm_update_pch name)
     set(ARG_DISABLE_PCH_REUSE ON)
   endif()
 
+  # The same macro the target is actually compiled with, from the one place
+  # that decides it.
+  llvm_get_abi_definition(mode_defs ${kind})
+
+  # Add the downstream project's ABI dimension, orthogonal to LLVM_ABI.
+  list(APPEND mode_defs ${abi_defs})
+
+  # The set of ABI defines *is* the mode: two targets can share a PCH exactly
+  # when their defines match. Sort so that providers and consumers that carry
+  # the same defines compare equal regardless of the order they were added in.
+  list(SORT mode_defs)
+
   # Find PCH with highest priority from dependencies. We reuse the first PCH
   # with the highest priority. If the target has its own set of PCH, we give it
   # a higher priority so that dependents will prefer the new PCH. We don't do
@@ -125,7 +287,7 @@ function(llvm_update_pch name)
       get_target_property(lib_disable_pch ${lib} DISABLE_PRECOMPILE_HEADERS)
       if(${lib_pch_priority} GREATER ${pch_priority} AND NOT ${lib_disable_pch})
         set(pch_priority ${lib_pch_priority})
-        set(pch_reuse ${lib})
+        set(pch_provider ${lib})
       endif()
     endif()
   endforeach()
@@ -137,12 +299,55 @@ function(llvm_update_pch name)
       # Set priority so that dependants can reuse the PCH.
       math(EXPR pch_priority "${pch_priority} + 1")
       set_target_properties(${name} PROPERTIES LLVM_PCH_PRIORITY ${pch_priority})
+      # Record the ABI defines this PCH was compiled with and the headers it
+      # used, so a dependant carrying different defines can reuse a shared
+      # variant instead of this PCH.
+      set_target_properties(${name} PROPERTIES
+        LLVM_PCH_ABI_DEFINITIONS "${mode_defs}"
+        LLVM_PCH_HEADER "${ARG_PRECOMPILE_HEADERS}"
+      )
     endif()
-  elseif(pch_reuse AND NOT ARG_DISABLE_PCH_REUSE)
-    message(DEBUG "Using PCH ${pch_reuse} for ${name} (prio ${pch_priority})")
-    target_precompile_headers(${name} REUSE_FROM ${pch_reuse})
+  elseif(pch_provider AND NOT ARG_DISABLE_PCH_REUSE)
+    # Get the ABI defines the provider's PCH was compiled with.
+    get_target_property(provider_defs ${pch_provider} LLVM_PCH_ABI_DEFINITIONS)
+    if(mode_defs STREQUAL "${provider_defs}")
+      # Same defines: reuse the provider's PCH directly.
+      message(DEBUG "Using PCH ${pch_provider} for ${name} (prio ${pch_priority})")
+      target_precompile_headers(${name} REUSE_FROM ${pch_provider})
+    else()
+      # Different defines: reuse a single shared PCH built for them instead.
+      llvm_reuse_shared_pch_variant(${name} ${pch_provider} "${mode_defs}")
+    endif()
   else()
     message(DEBUG "Using NO PCH for ${name}")
+  endif()
+endfunction()
+
+# llvm_link_pch_variant_collectors(<name> <gen_chain_tool>)
+#
+# Link the build-only PCH-variant collectors into a final image if needed.
+# These are defined in llvm/CMakeLists.txt. See the comment about
+# LLVMPCHCollector* there for details.
+function(llvm_link_pch_variant_collectors name gen_chain_tool)
+  if(NOT TARGET LLVMPCHCollectorPreTableGen)
+    # The collectors were not created.
+    return()
+  endif()
+
+  get_target_property(_type ${name} TYPE)
+  if(NOT _type STREQUAL "SHARED_LIBRARY" AND
+     NOT _type STREQUAL "MODULE_LIBRARY" AND
+     NOT _type STREQUAL "EXECUTABLE")
+    # The target does not need the collectors.
+    return()
+  endif()
+
+  target_link_libraries(${name} PRIVATE $<BUILD_LOCAL_INTERFACE:LLVMPCHCollectorPreTableGen>)
+
+  if(NOT gen_chain_tool)
+    # Do not link the post-tablegen collector into tablegen tools; that would
+    # be circular.
+    target_link_libraries(${name} PRIVATE $<BUILD_LOCAL_INTERFACE:LLVMPCHCollectorPostTableGen>)
   endif()
 endfunction()
 
@@ -593,11 +798,15 @@ endfunction(set_windows_version_resource_properties)
 #      This is used to specify that this is a component library of
 #      LLVM which means that the source resides in llvm/lib/ and it is a
 #      candidate for inclusion into libLLVM.so.
+#   PCH_ABI_DEFINITION "macro"
+#      Optional ABI-defining macro contributed by a downstream project. This
+#      is used to differentiate between PCH variants with different command-line
+#      defines.
 #   )
 function(llvm_add_library name)
   cmake_parse_arguments(ARG
     "MODULE;SHARED;STATIC;OBJECT;DISABLE_LLVM_LINK_LLVM_DYLIB;SONAME;NO_INSTALL_RPATH;COMPONENT_LIB;DISABLE_PCH_REUSE"
-    "OUTPUT_NAME;PLUGIN_TOOL;ENTITLEMENTS;BUNDLE_PATH"
+    "OUTPUT_NAME;PLUGIN_TOOL;ENTITLEMENTS;BUNDLE_PATH;PCH_ABI_DEFINITION"
     "ADDITIONAL_HEADERS;PRECOMPILE_HEADERS;DEPENDS;LINK_COMPONENTS;LINK_LIBS;OBJLIBS"
     ${ARGN})
   list(APPEND LLVM_COMMON_DEPENDS ${ARG_DEPENDS})
@@ -648,7 +857,7 @@ function(llvm_add_library name)
       ${ALL_FILES}
       )
     llvm_update_compile_flags(${obj_name})
-    llvm_update_pch(${obj_name})
+    llvm_update_pch(${obj_name} objlib "${ARG_PCH_ABI_DEFINITION}")
     if(CMAKE_GENERATOR STREQUAL "Xcode")
       set(DUMMY_FILE ${CMAKE_CURRENT_BINARY_DIR}/Dummy.c)
       file(WRITE ${DUMMY_FILE} "// This file intentionally empty\n")
@@ -695,8 +904,9 @@ function(llvm_add_library name)
       endforeach()
     endif()
 
-    if(ARG_DISABLE_LLVM_LINK_LLVM_DYLIB)
-      target_compile_definitions(${obj_name} PRIVATE LLVM_BUILD_STATIC)
+    llvm_get_abi_definition(objlib_abi_def objlib)
+    if(objlib_abi_def)
+      target_compile_definitions(${obj_name} PRIVATE ${objlib_abi_def})
     endif()
   endif()
 
@@ -733,6 +943,14 @@ function(llvm_add_library name)
   endif()
   set_target_properties(${name} PROPERTIES FOLDER "${subproject_title}/Libraries")
 
+  llvm_get_abi_definition(lib_abi_def lib)
+  if(lib_abi_def)
+    target_compile_definitions(${name} PRIVATE ${lib_abi_def})
+  endif()
+
+  # Link the PCH collectors if needed.
+  llvm_link_pch_variant_collectors(${name} FALSE)
+
   ## If were compiling with clang-cl use /Zc:dllexportInlines- to exclude inline
   ## class members from being dllexport'ed to reduce compile time.
   ## This will also keep us below the 64k exported symbol limit
@@ -747,9 +965,6 @@ function(llvm_add_library name)
 
   if(ARG_COMPONENT_LIB)
     set_target_properties(${name} PROPERTIES LLVM_COMPONENT TRUE)
-    if(LLVM_BUILD_LLVM_DYLIB OR BUILD_SHARED_LIBS)
-      target_compile_definitions(${name} PRIVATE LLVM_EXPORTS)
-    endif()
 
     # When building shared objects for each target there are some internal APIs
     # that are used across shared objects which we can't hide.
@@ -783,7 +998,7 @@ function(llvm_add_library name)
   # $<TARGET_OBJECTS> doesn't require compile flags.
   if(NOT obj_name)
     llvm_update_compile_flags(${name})
-    llvm_update_pch(${name})
+    llvm_update_pch(${name} lib "${ARG_PCH_ABI_DEFINITION}")
   else()
     get_target_property(lib_disable_pch ${obj_name} DISABLE_PRECOMPILE_HEADERS)
     if(NOT ${lib_disable_pch})
@@ -865,9 +1080,6 @@ function(llvm_add_library name)
     if (LLVM_LINK_LLVM_DYLIB AND NOT ARG_DISABLE_LLVM_LINK_LLVM_DYLIB)
       set(llvm_libs LLVM)
     else()
-      if(ARG_DISABLE_LLVM_LINK_LLVM_DYLIB)
-        target_compile_definitions(${name} PRIVATE LLVM_BUILD_STATIC)
-      endif()
       llvm_map_components_to_libnames(llvm_libs
         ${LLVM_LINK_COMPONENTS}
        )
@@ -1089,7 +1301,7 @@ macro(add_llvm_library name)
 endmacro(add_llvm_library name)
 
 macro(generate_llvm_objects name)
-  cmake_parse_arguments(ARG "GENERATE_DRIVER" "" "DEPENDS" ${ARGN})
+  cmake_parse_arguments(ARG "GENERATE_DRIVER" "PCH_ABI_DEFINITION" "DEPENDS" ${ARGN})
 
   llvm_process_sources( ALL_FILES ${ARG_UNPARSED_ARGUMENTS} )
 
@@ -1103,7 +1315,7 @@ macro(generate_llvm_objects name)
       ${ALL_FILES}
       )
     llvm_update_compile_flags(${obj_name})
-    llvm_update_pch(${obj_name})
+    llvm_update_pch(${obj_name} objlib "${ARG_PCH_ABI_DEFINITION}")
     set(ALL_FILES "$<TARGET_OBJECTS:${obj_name}>")
     if(ARG_DEPENDS)
       add_dependencies(${obj_name} ${ARG_DEPENDS})
@@ -1152,11 +1364,18 @@ endmacro()
 
 macro(add_llvm_executable name)
   cmake_parse_arguments(ARG
-    "DISABLE_LLVM_LINK_LLVM_DYLIB;IGNORE_EXTERNALIZE_DEBUGINFO;NO_INSTALL_RPATH;SUPPORT_PLUGINS;EXPORT_SYMBOLS;DISABLE_PCH_REUSE"
-    "ENTITLEMENTS;BUNDLE_PATH"
+    "DISABLE_LLVM_LINK_LLVM_DYLIB;IGNORE_EXTERNALIZE_DEBUGINFO;NO_INSTALL_RPATH;SUPPORT_PLUGINS;EXPORT_SYMBOLS;DISABLE_PCH_REUSE;PCH_GEN_CHAIN_TOOL"
+    "ENTITLEMENTS;BUNDLE_PATH;PCH_ABI_DEFINITION"
     ""
     ${ARGN})
-  generate_llvm_objects(${name} ${ARG_UNPARSED_ARGUMENTS})
+  # Only forward PCH_ABI_DEFINITION when set: an empty single-value arg passed
+  # positionally is dropped by the downstream cmake_parse_arguments (unquoted
+  # ${ARGN} expansion) and would swallow the next real argument (a source file).
+  set(pch_abi_definition_arg "")
+  if(ARG_PCH_ABI_DEFINITION)
+    set(pch_abi_definition_arg PCH_ABI_DEFINITION "${ARG_PCH_ABI_DEFINITION}")
+  endif()
+  generate_llvm_objects(${name} ${pch_abi_definition_arg} ${ARG_UNPARSED_ARGUMENTS})
   add_windows_version_resource_file(ALL_FILES ${ALL_FILES})
 
   if(XCODE)
@@ -1172,6 +1391,9 @@ macro(add_llvm_executable name)
   endif()
   get_subproject_title(subproject_title)
   set_target_properties(${name} PROPERTIES FOLDER "${subproject_title}/Executables")
+
+  # Link the PCH collectors if needed.
+  llvm_link_pch_variant_collectors(${name} ${ARG_PCH_GEN_CHAIN_TOOL})
 
   setup_dependency_debugging(${name} ${LLVM_COMMON_DEPENDS})
 
@@ -1202,7 +1424,7 @@ macro(add_llvm_executable name)
   # $<TARGET_OBJECTS> doesn't require compile flags.
   if(NOT LLVM_ENABLE_OBJLIB)
     llvm_update_compile_flags(${name})
-    llvm_update_pch(${name})
+    llvm_update_pch(${name} exe "${ARG_PCH_ABI_DEFINITION}")
   elseif(NOT ARG_DISABLE_PCH_REUSE)
     get_target_property(lib_disable_pch ${obj_name} DISABLE_PRECOMPILE_HEADERS)
     if(NOT ${lib_disable_pch})
@@ -1276,8 +1498,9 @@ macro(add_llvm_executable name)
     export_executable_symbols(${name})
   endif()
 
-  if(ARG_DISABLE_LLVM_LINK_LLVM_DYLIB OR NOT LLVM_LINK_LLVM_DYLIB)
-    target_compile_definitions(${name} PRIVATE LLVM_BUILD_STATIC)
+  llvm_get_abi_definition(exe_abi_def exe)
+  if(exe_abi_def)
+    target_compile_definitions(${name} PRIVATE ${exe_abi_def})
   endif()
 
   if(LLVM_BUILD_LLVM_DYLIB_VIS AND NOT LLVM_DYLIB_EXPORT_INLINES AND
@@ -1959,7 +2182,11 @@ function(add_benchmark benchmark_name)
     set(EXCLUDE_FROM_ALL ON)
   endif()
 
-  add_llvm_executable(${benchmark_name} IGNORE_EXTERNALIZE_DEBUGINFO NO_INSTALL_RPATH ${ARGN})
+  # Benchmarks pick up defines from the benchmark library (BENCHMARK_STATIC_DEFINE
+  # and friends) that a shared LLVM PCH is not built with, so opt out of reuse
+  # rather than fragment the PCH set over a handful of small targets.
+  add_llvm_executable(${benchmark_name} IGNORE_EXTERNALIZE_DEBUGINFO
+                      NO_INSTALL_RPATH DISABLE_PCH_REUSE ${ARGN})
   set(outdir ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR})
   set_output_directory(${benchmark_name} BINARY_DIR ${outdir} LIBRARY_DIR ${outdir})
   get_subproject_title(subproject_title)

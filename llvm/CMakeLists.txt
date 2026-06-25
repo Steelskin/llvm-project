@@ -1361,6 +1361,48 @@ set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "")
 include(AddLLVM)
 include(TableGen)
 
+# Define build-only collector libraries that carry shared precompiled-header
+# objects into the images that reuse them.
+#
+# A PCH can only be reused by translation units compiled with the same
+# preprocessor state, so targets differing in their command line defines cannot
+# share one. To work around this issue, `llvm_update_pch()` classifies each
+# target based on abi defines and `llvm_reuse_shared_pch_variant()` builds one
+# shared PCH per provider and abi defines called a "variant". This is an OBJECT
+# library over a single empty source file whose only products are that PCH and
+# the object that creates it.
+#
+# On MSVC the object that creates a PCH must be linked into every image that
+# reuses it, or the link fails. Nothing actually links a variant, so we define
+# collector static libraries here that are linked into every executable and
+# shared library through `$<BUILD_LOCAL_INTERFACE>` in
+# `llvm_link_pch_variant_collectors()`.
+#
+# We need two collectors to avoid a dependency cycle around tablegen-generated
+# headers. The tablegen tools depend on LLVMCore's PCH, which depends on the
+# tablegen tools, e.g.
+#   llvm-tblgen
+#     -> collector library
+#     -> LLVMCore's PCH
+#     -> intrinsics_gen
+#     -> llvm-tblgen
+#
+# Breaking the collectors into two libraries solves the issue:
+# * LLVMPCHCollectorPreTableGen is linked into every image.
+# * LLVMPCHCollectorPostTableGen is *not* linked into the tablegen tools.
+# The dependency graph for the tablegen tools is then:
+#   llvm-tblgen
+#     -> LLVMPCHCollectorPreTableGen
+#     -> LLVMSupport's PCH (no tablegen dependency)
+if(MSVC AND NOT CMAKE_DISABLE_PRECOMPILE_HEADERS)
+  add_library(LLVMPCHCollectorPreTableGen STATIC EXCLUDE_FROM_ALL
+              ${LLVM_MAIN_SRC_DIR}/cmake/dummy.cpp)
+  add_library(LLVMPCHCollectorPostTableGen STATIC EXCLUDE_FROM_ALL
+              ${LLVM_MAIN_SRC_DIR}/cmake/dummy.cpp)
+  set_target_properties(LLVMPCHCollectorPreTableGen LLVMPCHCollectorPostTableGen
+                        PROPERTIES FOLDER "LLVM/Precompiled Headers")
+endif()
+
 include(LLVMDistributionSupport)
 
 if( MINGW AND NOT "${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang" )

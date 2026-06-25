@@ -774,6 +774,7 @@ if (MSVC)
       -wd4805 # Suppress 'unsafe mix of type <type> and type <type> in operation'
       -wd4577 # Suppress 'noexcept used with no exception handling mode specified; termination on exception is not guaranteed'
       -wd4319 # Suppress ''operator' : zero extending 'type' to 'type' of greater size'
+      -wd4661
 
       # Ideally, we'd like this warning to be enabled, but even MSVC 2019 doesn't
       # support the 'aligned' attribute in the way that clang sources requires (for

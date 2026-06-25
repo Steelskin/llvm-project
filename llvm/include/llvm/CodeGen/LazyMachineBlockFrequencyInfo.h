@@ -17,11 +17,10 @@
 #define LLVM_CODEGEN_LAZYMACHINEBLOCKFREQUENCYINFO_H
 
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
+#include "llvm/CodeGen/MachineCycleAnalysis.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 
 namespace llvm {
-
-class MachineCycleInfo;
 
 /// This is an alternative analysis pass to MachineBlockFrequencyInfo.
 /// The difference is that with this pass, the block frequencies are not
