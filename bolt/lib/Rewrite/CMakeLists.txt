@@ -10,6 +10,14 @@ set(LLVM_LINK_COMPONENTS
   DWARFLinkerClassic
   AsmPrinter
   TargetParser
+  # Not used by BOLT directly. JITLink.h includes Orc/Core.h, and MSVC emits
+  # the vtable of every dllexport class in each translation unit that sees
+  # it, so in an LLVM_BUILD_LLVM_DYLIB build with cl.exe the objects of
+  # LLVMJITLink reference ORC and RuntimeDyld virtuals. BOLT links the LLVM
+  # components statically (DISABLE_LLVM_LINK_LLVM_DYLIB below), so it has to
+  # supply them itself. Elsewhere these archives contribute nothing.
+  OrcJIT
+  RuntimeDyld
   )
 
 add_llvm_library(LLVMBOLTRewrite

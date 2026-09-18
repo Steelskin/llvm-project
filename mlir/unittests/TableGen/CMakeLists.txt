@@ -7,6 +7,11 @@ set(LLVM_TARGET_DEFINITIONS passes.td)
 mlir_tablegen(PassGenTest.h.inc -gen-pass-decls -name TableGenTest)
 add_public_tablegen_target(MLIRTableGenTestPassIncGen)
 
+# LLVMTableGen is not part of libLLVM. Request it as a component rather than by
+# name so that the flavour matching this test's own link mode is picked; see
+# llvm/lib/TableGen/CMakeLists.txt.
+set(LLVM_LINK_COMPONENTS TableGen)
+
 add_mlir_unittest(MLIRTableGenTests
   EnumsGenTest.cpp
   FormatTest.cpp
@@ -24,7 +29,12 @@ target_include_directories(MLIRTableGenTests
   ${CMAKE_CURRENT_BINARY_DIR}/../../test/lib/Dialect/Test
 )
 
+# MLIRIR has to come from libMLIR when that is in use (as it does for
+# MLIRTestDialect), or the test ends up with a second copy of the MLIR core and
+# attribute storage lookups fail at runtime. MLIRTableGen is never part of
+# libMLIR, so it is linked directly.
+mlir_target_link_libraries(MLIRTableGenTests PRIVATE MLIRIR)
 target_link_libraries(MLIRTableGenTests
-  PRIVATE LLVMTableGen MLIRTableGen MLIRIR
+  PRIVATE MLIRTableGen
   PUBLIC MLIRTestDialect
 )

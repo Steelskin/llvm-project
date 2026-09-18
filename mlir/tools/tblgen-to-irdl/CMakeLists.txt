@@ -1,8 +1,10 @@
 set(LLVM_LINK_COMPONENTS
+  Support
   TableGen
 )
 
 add_tablegen(tblgen-to-irdl MLIR
+  LINK_LLVM_DYLIB
   DESTINATION "${MLIR_TOOLS_INSTALL_DIR}"
   EXPORT MLIR
   tblgen-to-irdl.cpp

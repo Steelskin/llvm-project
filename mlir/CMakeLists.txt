@@ -168,8 +168,27 @@ set(MLIR_INSTALL_AGGREGATE_OBJECTS 1 CACHE BOOL
 
 set(MLIR_BUILD_MLIR_C_DYLIB 0 CACHE BOOL "Builds libMLIR-C shared library.")
 
-set(MLIR_LINK_MLIR_DYLIB ${LLVM_LINK_LLVM_DYLIB} CACHE BOOL
+# Whether libMLIR can be built at all. MLIR has no export annotations, so the
+# MSVC ABI cannot produce a usable shared library, and a shared library needs
+# PIC. Keep in sync with mlir/tools/mlir-shlib/CMakeLists.txt.
+set(MLIR_CAN_BUILD_MLIR_DYLIB ON)
+if(NOT LLVM_BUILD_LLVM_DYLIB OR NOT LLVM_ENABLE_PIC OR MSVC)
+  set(MLIR_CAN_BUILD_MLIR_DYLIB OFF)
+endif()
+
+if(LLVM_LINK_LLVM_DYLIB AND MLIR_CAN_BUILD_MLIR_DYLIB)
+  set(MLIR_LINK_MLIR_DYLIB_DEFAULT ON)
+else()
+  set(MLIR_LINK_MLIR_DYLIB_DEFAULT OFF)
+endif()
+set(MLIR_LINK_MLIR_DYLIB ${MLIR_LINK_MLIR_DYLIB_DEFAULT} CACHE BOOL
     "Link tools against libMLIR.so")
+if(MLIR_LINK_MLIR_DYLIB AND NOT MLIR_CAN_BUILD_MLIR_DYLIB)
+  message(WARNING "MLIR_LINK_MLIR_DYLIB is set but libMLIR cannot be built in "
+                  "this configuration; linking tools against the MLIR static "
+                  "libraries instead.")
+  set(MLIR_LINK_MLIR_DYLIB OFF)
+endif()
 
 configure_file(
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/Config/mlir-config.h.cmake

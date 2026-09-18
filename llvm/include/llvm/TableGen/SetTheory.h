@@ -68,7 +68,7 @@ public:
   using RecSet = SmallSetVector<const Record *, 16>;
 
   /// Operator - A callback representing a DAG operator.
-  class LLVM_ABI Operator {
+  class Operator {
     virtual void anchor();
 
   public:
@@ -83,7 +83,7 @@ public:
   /// Expander - A callback function that can transform a Record representing a
   /// set into a fully expanded list of elements. Expanders provide a way for
   /// users to define named sets that can be used in DAG expressions.
-  class LLVM_ABI Expander {
+  class Expander {
     virtual void anchor();
 
   public:
@@ -106,10 +106,10 @@ private:
 
 public:
   /// Create a SetTheory instance with only the standard operators.
-  LLVM_ABI SetTheory();
+  SetTheory();
 
   /// addExpander - Add an expander for Records with the named super class.
-  LLVM_ABI void addExpander(StringRef ClassName, std::unique_ptr<Expander>);
+  void addExpander(StringRef ClassName, std::unique_ptr<Expander>);
 
   /// addFieldExpander - Add an expander for ClassName that simply evaluates
   /// FieldName in the Record to get the set elements. That is all that is
@@ -119,13 +119,13 @@ public:
   ///     dag Elts = d;
   ///   }
   ///
-  LLVM_ABI void addFieldExpander(StringRef ClassName, StringRef FieldName);
+  void addFieldExpander(StringRef ClassName, StringRef FieldName);
 
   /// addOperator - Add a DAG operator.
-  LLVM_ABI void addOperator(StringRef Name, std::unique_ptr<Operator>);
+  void addOperator(StringRef Name, std::unique_ptr<Operator>);
 
   /// evaluate - Evaluate Expr and append the resulting set to Elts.
-  LLVM_ABI void evaluate(const Init *Expr, RecSet &Elts, ArrayRef<SMLoc> Loc);
+  void evaluate(const Init *Expr, RecSet &Elts, ArrayRef<SMLoc> Loc);
 
   /// evaluate - Evaluate a sequence of Inits and append to Elts.
   template<typename Iter>
@@ -137,7 +137,7 @@ public:
   /// expand - Expand a record into a set of elements if possible. Return a
   /// pointer to the expanded elements, or NULL if Set cannot be expanded
   /// further.
-  LLVM_ABI const RecVec *expand(const Record *Set);
+  const RecVec *expand(const Record *Set);
 };
 
 } // end namespace llvm
