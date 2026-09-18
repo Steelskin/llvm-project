@@ -49,6 +49,7 @@ SKIP_HEADERS = [
     # These are not LLVM component libraries.
     "llvm/include/llvm/HTTP/",
     "llvm/include/llvm/Debuginfod/",
+    "llvm/include/llvm/TableGen/",
     # These are meant to be included via `Pass.h`, not directly.
     "llvm/include/llvm/PassAnalysisSupport.h",
     "llvm/include/llvm/PassSupport.h",
@@ -67,15 +68,6 @@ SKIP_HEADERS = [
     "llvm/include/llvm/Support/TargetSelect.h",
     # zOS-specific shims.
     "llvm/include/llvm/Support/AutoConvert.h",
-    # `class LLVM_ABI DagInit` (and similar in this file) inherit from
-    # `TrailingObjects<DagInit, T1, T2>` with multiple trailing types.
-    # MSVC `__declspec(dllexport)` on the class forces instantiation of
-    # all members including `getTrailingObjects()` (no-arg), which has a
-    # `static_assert(sizeof...(TrailingTys) == 1, ...)` in its body. The
-    # build then fails with C2338. Until `TrailingObjects.h` is updated
-    # to gate the no-arg overload via SFINAE / requires-clause, skip the
-    # whole header.
-    "llvm/include/llvm/TableGen/Record.h",
     # Pimpl classes annotated `LLVM_ABI` that hold `std::unique_ptr<T>`
     # of a forward-declared T defined only in the matching .cpp. MSVC's
     # class-level `__declspec(dllexport)` forces the virtual destructor

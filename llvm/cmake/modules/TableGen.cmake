@@ -180,12 +180,23 @@ function(add_public_tablegen_target target)
 endfunction()
 
 macro(add_tablegen target project)
-  cmake_parse_arguments(ADD_TABLEGEN "" "DESTINATION;EXPORT" "" ${ARGN})
+  cmake_parse_arguments(ADD_TABLEGEN "LINK_LLVM_DYLIB" "DESTINATION;EXPORT" "" ${ARGN})
 
   set(${target}_OLD_LLVM_LINK_COMPONENTS ${LLVM_LINK_COMPONENTS})
   set(LLVM_LINK_COMPONENTS ${LLVM_LINK_COMPONENTS} TableGen)
 
-  add_llvm_executable(${target} DISABLE_LLVM_LINK_LLVM_DYLIB
+  # Most tablegen tools have to run before libLLVM can exist -- the dylib is
+  # built from sources that tablegen generates -- so they link the component
+  # libraries statically. A tool that also depends on libraries built against
+  # libLLVM has to pass LINK_LLVM_DYLIB, or it ends up with two copies of
+  # Support on its link line.
+  if(ADD_TABLEGEN_LINK_LLVM_DYLIB)
+    set(add_tablegen_dylib_arg)
+  else()
+    set(add_tablegen_dylib_arg DISABLE_LLVM_LINK_LLVM_DYLIB)
+  endif()
+
+  add_llvm_executable(${target} ${add_tablegen_dylib_arg}
     ${ADD_TABLEGEN_UNPARSED_ARGUMENTS})
   set(LLVM_LINK_COMPONENTS ${${target}_OLD_LLVM_LINK_COMPONENTS})
 

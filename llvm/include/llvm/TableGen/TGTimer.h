@@ -38,17 +38,17 @@ public:
   }
 
   /// Start timing a phase. Automatically stops any previous phase timer.
-  LLVM_ABI void startTimer(StringRef Name);
+  void startTimer(StringRef Name);
 
   /// Stop timing a phase.
-  LLVM_ABI void stopTimer();
+  void stopTimer();
 
   /// Start timing the overall backend. If the backend itself starts a timer,
   /// then this timer is cleared.
-  LLVM_ABI void startBackendTimer(StringRef Name);
+  void startBackendTimer(StringRef Name);
 
   /// Stop timing the overall backend.
-  LLVM_ABI void stopBackendTimer();
+  void stopBackendTimer();
 
   /// Stop phase timing and print the report.
   void stopPhaseTiming() { TimingGroup.reset(); }
