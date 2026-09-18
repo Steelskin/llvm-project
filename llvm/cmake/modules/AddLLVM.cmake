@@ -566,6 +566,11 @@ endfunction(set_windows_version_resource_properties)
 #   DISABLE_LLVM_LINK_LLVM_DYLIB
 #     Do not link this library to libLLVM, even if
 #     LLVM_LINK_LLVM_DYLIB is enabled.
+#   IN_LLVM
+#     This library's objects are linked into libLLVM itself, so it does not
+#     link libLLVM and is built the way a component library is: exporting its
+#     own API rather than importing LLVM's. Mutually exclusive with
+#     COMPONENT_LIB and DISABLE_LLVM_LINK_LLVM_DYLIB.
 #   OUTPUT_NAME name
 #     Corresponds to OUTPUT_NAME in target properties.
 #   DEPENDS targets...
@@ -596,12 +601,18 @@ endfunction(set_windows_version_resource_properties)
 #   )
 function(llvm_add_library name)
   cmake_parse_arguments(ARG
-    "MODULE;SHARED;STATIC;OBJECT;DISABLE_LLVM_LINK_LLVM_DYLIB;SONAME;NO_INSTALL_RPATH;COMPONENT_LIB;DISABLE_PCH_REUSE"
+    "MODULE;SHARED;STATIC;OBJECT;DISABLE_LLVM_LINK_LLVM_DYLIB;IN_LLVM;SONAME;NO_INSTALL_RPATH;COMPONENT_LIB;DISABLE_PCH_REUSE"
     "OUTPUT_NAME;PLUGIN_TOOL;ENTITLEMENTS;BUNDLE_PATH"
     "ADDITIONAL_HEADERS;PRECOMPILE_HEADERS;DEPENDS;LINK_COMPONENTS;LINK_LIBS;OBJLIBS"
     ${ARGN})
   list(APPEND LLVM_COMMON_DEPENDS ${ARG_DEPENDS})
   list(APPEND LLVM_LINK_COMPONENTS ${ARG_LINK_COMPONENTS})
+
+  if(ARG_IN_LLVM AND (ARG_COMPONENT_LIB OR ARG_DISABLE_LLVM_LINK_LLVM_DYLIB))
+    message(FATAL_ERROR "${name}: IN_LLVM cannot be combined with "
+                        "COMPONENT_LIB or DISABLE_LLVM_LINK_LLVM_DYLIB; a "
+                        "library inside libLLVM already does not link it.")
+  endif()
   if(ARG_ADDITIONAL_HEADERS)
     # Pass through ADDITIONAL_HEADERS.
     set(ARG_ADDITIONAL_HEADERS ADDITIONAL_HEADERS ${ARG_ADDITIONAL_HEADERS})
@@ -747,8 +758,15 @@ function(llvm_add_library name)
 
   if(ARG_COMPONENT_LIB)
     set_target_properties(${name} PROPERTIES LLVM_COMPONENT TRUE)
+    set_property(GLOBAL APPEND PROPERTY LLVM_COMPONENT_LIBS ${name})
+  endif()
+
+  if(ARG_COMPONENT_LIB OR ARG_IN_LLVM)
     if(LLVM_BUILD_LLVM_DYLIB OR BUILD_SHARED_LIBS)
       target_compile_definitions(${name} PRIVATE LLVM_EXPORTS)
+      if(TARGET ${obj_name})
+        target_compile_definitions(${obj_name} PRIVATE LLVM_EXPORTS)
+      endif()
     endif()
 
     # When building shared objects for each target there are some internal APIs
@@ -762,8 +780,13 @@ function(llvm_add_library name)
                             C_VISIBILITY_PRESET hidden
                             CXX_VISIBILITY_PRESET hidden
                             VISIBILITY_INLINES_HIDDEN YES)
+      if(TARGET ${obj_name})
+        set_target_properties(${obj_name} PROPERTIES
+                              C_VISIBILITY_PRESET hidden
+                              CXX_VISIBILITY_PRESET hidden
+                              VISIBILITY_INLINES_HIDDEN YES)
+      endif()
     endif()
-    set_property(GLOBAL APPEND PROPERTY LLVM_COMPONENT_LIBS ${name})
   endif()
 
   if(NOT ARG_NO_INSTALL_RPATH)
@@ -861,6 +884,13 @@ function(llvm_add_library name)
   if(ARG_MODULE AND LLVM_EXPORT_SYMBOLS_FOR_PLUGINS AND ARG_PLUGIN_TOOL AND (WIN32 OR CYGWIN))
     # On DLL platforms symbols are imported from the tool by linking against it.
     set(llvm_libs ${ARG_PLUGIN_TOOL})
+  elseif (ARG_IN_LLVM)
+    # Linking libLLVM here would make libLLVM depend on this library and this
+    # library on libLLVM, which CMake rejects as a cycle. Name the component
+    # libraries directly instead.
+    llvm_map_components_to_libnames(llvm_libs
+      ${LLVM_LINK_COMPONENTS}
+      )
   elseif (NOT ARG_COMPONENT_LIB)
     if (LLVM_LINK_LLVM_DYLIB AND NOT ARG_DISABLE_LLVM_LINK_LLVM_DYLIB)
       set(llvm_libs LLVM)
@@ -1315,9 +1345,14 @@ function(add_llvm_pass_plugin name)
   option(LLVM_${name_upper}_LINK_INTO_TOOLS "Statically link ${name} into tools (if available)" ${link_into_tools_default})
 
   # If we statically link the plugin, don't use llvm dylib because we're going
-  # to be part of it.
+  # to be part of it. A NO_MODULE plugin is built into libLLVM rather than into
+  # a loadable module, so it is also built like the rest of libLLVM.
   if(LLVM_${name_upper}_LINK_INTO_TOOLS)
-      list(APPEND ARG_UNPARSED_ARGUMENTS DISABLE_LLVM_LINK_LLVM_DYLIB)
+      if(ARG_NO_MODULE)
+        list(APPEND ARG_UNPARSED_ARGUMENTS IN_LLVM)
+      else()
+        list(APPEND ARG_UNPARSED_ARGUMENTS DISABLE_LLVM_LINK_LLVM_DYLIB)
+      endif()
   endif()
 
   if(LLVM_${name_upper}_LINK_INTO_TOOLS)
