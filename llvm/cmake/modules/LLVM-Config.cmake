@@ -69,6 +69,53 @@ function(is_llvm_target_specifier library return_var)
   endif()
 endfunction()
 
+# Out of the given names, return the ones that do not resolve to an LLVM
+# component library. Those name libraries that are deliberately not components
+# (LLVMTableGen, for instance), which means they are absent from libLLVM and
+# have to be linked in addition to it. Everything else libLLVM already covers.
+function(llvm_filter_non_component_libs out_components)
+  set(component_libs ${LLVM_COMPONENT_LIBS})
+  if(NOT component_libs)
+    # Inside LLVM itself the library lists are in global properties.
+    get_property(component_libs GLOBAL PROPERTY LLVM_COMPONENT_LIBS)
+  endif()
+  set(available_libs ${LLVM_AVAILABLE_LIBS})
+  if(NOT available_libs)
+    get_property(available_libs GLOBAL PROPERTY LLVM_LIBS)
+  endif()
+  if(NOT component_libs OR NOT available_libs)
+    # Nothing to tell components and non-components apart with, so keep the
+    # historical assumption that libLLVM covers everything.
+    set(${out_components} "" PARENT_SCOPE)
+    return()
+  endif()
+
+  string(TOUPPER "${component_libs}" capitalized_component_libs)
+  string(TOUPPER "${available_libs}" capitalized_available_libs)
+
+  # Deliberately a plain name lookup rather than
+  # llvm_map_components_to_libnames(): this runs while libraries are still
+  # being declared, and a pseudo-component ("all", "native", a target name)
+  # always expands to components anyway. A name that does not resolve yet is
+  # left out, which just means assuming libLLVM covers it -- the behaviour
+  # this function replaced.
+  set(result "")
+  foreach(c ${ARGN})
+    get_property(c_rename GLOBAL PROPERTY LLVM_COMPONENT_NAME_${c})
+    if(c_rename)
+      set(c_name ${c_rename})
+    else()
+      set(c_name ${c})
+    endif()
+    string(TOUPPER "LLVM${c_name}" capitalized)
+    if(capitalized IN_LIST capitalized_available_libs AND
+       NOT capitalized IN_LIST capitalized_component_libs)
+      list(APPEND result ${c})
+    endif()
+  endforeach()
+  set(${out_components} "${result}" PARENT_SCOPE)
+endfunction()
+
 macro(llvm_config executable)
   cmake_parse_arguments(ARG "USE_SHARED" "" "" ${ARGN})
   set(link_components ${ARG_UNPARSED_ARGUMENTS})
@@ -80,13 +127,13 @@ macro(llvm_config executable)
     # the target requires.
     #
     # Strip LLVM_DYLIB_COMPONENTS out of link_components.
-    # To do this, we need special handling for "all", since that
-    # may imply linking to libraries that are not included in
-    # libLLVM.
+    # To do this, we need special handling for "all": it covers every LLVM
+    # component, but not the libraries that are deliberately not components,
+    # which are absent from libLLVM and still have to be linked.
 
     if (DEFINED link_components AND DEFINED LLVM_DYLIB_COMPONENTS)
       if("${LLVM_DYLIB_COMPONENTS}" STREQUAL "all")
-        set(link_components "")
+        llvm_filter_non_component_libs(link_components ${link_components})
       else()
         list(REMOVE_ITEM link_components ${LLVM_DYLIB_COMPONENTS})
       endif()

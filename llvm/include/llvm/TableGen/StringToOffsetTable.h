@@ -43,7 +43,7 @@ public:
   bool empty() const { return StringOffset.empty(); }
   size_t size() const { return AggregateString.size(); }
 
-  LLVM_ABI unsigned GetOrAddStringOffset(StringRef Str);
+  unsigned GetOrAddStringOffset(StringRef Str);
 
   // Returns the offset of `Str` in the table if its preset, else return
   // std::nullopt.
@@ -65,10 +65,10 @@ public:
   // The string table, and its input string contents, are always emitted as both
   // `static` and `constexpr`. Both `Name` and (`Name` + "Storage") must be
   // valid identifiers to declare.
-  LLVM_ABI void EmitStringTableDef(raw_ostream &OS, const Twine &Name) const;
+  void EmitStringTableDef(raw_ostream &OS, const Twine &Name) const;
 
   // Emit the string as one single string.
-  LLVM_ABI void EmitString(raw_ostream &O) const;
+  void EmitString(raw_ostream &O) const;
 };
 
 } // end namespace llvm

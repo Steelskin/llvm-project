@@ -172,6 +172,8 @@ public:
   virtual std::optional<SMRange> getMatchRange() const = 0;
 };
 
+inline FileCheckDiag::~FileCheckDiag() {}
+
 /// Abstract base class for recording a FileCheck diagnostic that reports a
 /// match result for a pattern.
 class MatchResultDiag : public FileCheckDiag {
@@ -201,6 +203,8 @@ public:
   /// What is the search range for the match result?
   SMRange getSearchRange() const { return SearchRange; }
 };
+
+inline MatchResultDiag::~MatchResultDiag() {}
 
 /// \c MatchResultDiag for a pattern that matched the input.
 class MatchFoundDiag : public MatchResultDiag {
@@ -321,6 +325,8 @@ public:
     MRD = MRDNew;
   }
 };
+
+inline MatchNoteDiag::~MatchNoteDiag() {}
 
 /// \c MatchNoteDiag for a fuzzy match that serves as a suggestion for the next
 /// intended match for an expected pattern with too few or no good matches.

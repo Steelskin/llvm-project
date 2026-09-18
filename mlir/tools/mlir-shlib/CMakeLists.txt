@@ -1,10 +1,6 @@
-# Building libmlir-cpp.so fails if LLVM_ENABLE_PIC=Off
-if (NOT LLVM_ENABLE_PIC)
-  return()
-endif()
-
-# Building libmlir-cpp.so may not work on MSVC
-if (MSVC)
+# MLIR_CAN_BUILD_MLIR_DYLIB covers LLVM_ENABLE_PIC and the MSVC ABI, both of
+# which rule out building libmlir-cpp.so.
+if (NOT MLIR_CAN_BUILD_MLIR_DYLIB)
   return()
 endif()
 
@@ -30,7 +26,7 @@ if(MLIR_LINK_MLIR_DYLIB)
   set(INSTALL_WITH_TOOLCHAIN INSTALL_WITH_TOOLCHAIN)
 endif()
 
-if(LLVM_BUILD_LLVM_DYLIB)
+if(MLIR_CAN_BUILD_MLIR_DYLIB)
   add_mlir_library(
     MLIR
     SHARED

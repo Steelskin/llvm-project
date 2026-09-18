@@ -355,11 +355,10 @@ function(add_mlir_library name)
     # Yes, because the target "obj.${name}" is referenced.
     set(NEEDS_OBJECT_LIB ON)
   endif ()
-  if(LLVM_BUILD_LLVM_DYLIB AND NOT ARG_EXCLUDE_FROM_LIBMLIR AND NOT XCODE)
+  if(MLIR_CAN_BUILD_MLIR_DYLIB AND NOT ARG_EXCLUDE_FROM_LIBMLIR AND NOT XCODE)
     # Yes, because in addition to the shared library, the object files are
     # needed for linking into libMLIR.so (see mlir/tools/mlir-shlib/CMakeLists.txt).
     # For XCode, -force_load is used instead.
-    # Windows is not supported (LLVM_BUILD_LLVM_DYLIB=ON will cause an error).
     set(NEEDS_OBJECT_LIB ON)
     set_property(GLOBAL APPEND PROPERTY MLIR_STATIC_LIBS ${name})
     set_property(GLOBAL APPEND PROPERTY MLIR_LLVM_LINK_COMPONENTS ${ARG_LINK_COMPONENTS})
@@ -708,13 +707,21 @@ function(mlir_check_link_libraries name)
       get_target_property(libs ${name} LINK_LIBRARIES)
     endif()
     # message("${name} libs are: ${libs}")
+    set(component_libs ${LLVM_COMPONENT_LIBS})
+    if(NOT component_libs)
+      get_property(component_libs GLOBAL PROPERTY LLVM_COMPONENT_LIBS)
+    endif()
     set(linking_llvm 0)
     foreach(lib ${libs})
       if(lib)
         if(${lib} MATCHES "^LLVM$")
           set(linking_llvm 1)
         endif()
-        if((${lib} MATCHES "^LLVM.+") AND ${linking_llvm})
+        # Only components are part of libLLVM. A library that is deliberately
+        # not a component (LLVMTableGen, for instance) is absent from it, so
+        # linking it next to libLLVM is the only way to get it and is fine.
+        if((${lib} MATCHES "^LLVM.+") AND ${linking_llvm} AND
+           (${lib} IN_LIST component_libs))
           # This will almost always cause execution problems, since the
           # same symbol might be loaded from 2 separate libraries.  This
           # often comes from referring to an LLVM library target

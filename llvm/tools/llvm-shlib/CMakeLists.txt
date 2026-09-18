@@ -18,12 +18,9 @@ if(LLVM_BUILD_LLVM_DYLIB)
     message(FATAL_ERROR "Generating libLLVM is not supported on z/OS")
   endif()
 
+  # LLVMTableGen is deliberately not a component, so it is not picked up here;
+  # see llvm/lib/TableGen/CMakeLists.txt for why.
   llvm_map_components_to_libnames(LIB_NAMES ${LLVM_DYLIB_COMPONENTS})
-
-  # Exclude libLLVMTableGen for the following reasons:
-  #  - it is only used by internal *-tblgen utilities;
-  #  - it pollutes the global options space.
-  list(REMOVE_ITEM LIB_NAMES "LLVMTableGen")
 
   if(LLVM_DYLIB_EXPORTED_SYMBOL_FILE)
     set(LLVM_EXPORTED_SYMBOL_FILE ${LLVM_DYLIB_EXPORTED_SYMBOL_FILE})

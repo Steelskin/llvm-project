@@ -6,6 +6,7 @@ set(LLVM_LINK_COMPONENTS
 )
 
 add_tablegen(mlir-tblgen MLIR
+  LINK_LLVM_DYLIB
   DESTINATION "${MLIR_TOOLS_INSTALL_DIR}"
   EXPORT MLIR
   AttrOrTypeDefGen.cpp
