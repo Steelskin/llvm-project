@@ -421,11 +421,11 @@ createOnDiskCAS(const Twine &Path);
 
 /// Set \p Path to a reasonable default on-disk path for a persistent CAS for
 /// the current user.
-Error getDefaultOnDiskCASPath(SmallVectorImpl<char> &Path);
+LLVM_ABI Error getDefaultOnDiskCASPath(SmallVectorImpl<char> &Path);
 
 /// Get a reasonable default on-disk path for a persistent CAS for the current
 /// user.
-llvm::Expected<std::string> getDefaultOnDiskCASPath();
+LLVM_ABI llvm::Expected<std::string> getDefaultOnDiskCASPath();
 
 class ActionCache;
 

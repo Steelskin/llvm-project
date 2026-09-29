@@ -179,6 +179,7 @@
 #include "llvm/MC/MCCASFormatSchemaBase.h"
 #include "llvm/MCCAS/MCCASReader.h"
 #include "llvm/Support/BinaryStreamReader.h"
+#include "llvm/Support/Compiler.h"
 #include "llvm/Support/DataExtractor.h"
 #include "llvm/Support/Endian.h"
 
@@ -194,9 +195,9 @@ class MCCASReader;
 // FIXME: Using the same structure from ObjectV1 from CASObjectFormat.
 class MCObjectProxy : public cas::ObjectProxy {
 public:
-  static Expected<MCObjectProxy> get(const MCSchema &Schema,
-                                     Expected<cas::ObjectProxy> Ref);
-  StringRef getKindString() const;
+  LLVM_ABI static Expected<MCObjectProxy> get(const MCSchema &Schema,
+                                              Expected<cas::ObjectProxy> Ref);
+  LLVM_ABI StringRef getKindString() const;
 
   /// Return the data skipping the type-id character.
   StringRef getData() const { return cas::ObjectProxy::getData().drop_front(); }
@@ -209,11 +210,11 @@ public:
 
   MCObjectProxy() = delete;
 
-  static Error encodeReferences(ArrayRef<cas::ObjectRef> Refs,
-                                SmallVectorImpl<char> &Data,
-                                SmallVectorImpl<cas::ObjectRef> &IDs);
+  LLVM_ABI static Error encodeReferences(ArrayRef<cas::ObjectRef> Refs,
+                                         SmallVectorImpl<char> &Data,
+                                         SmallVectorImpl<cas::ObjectRef> &IDs);
 
-  static Expected<SmallVector<cas::ObjectRef>>
+  LLVM_ABI static Expected<SmallVector<cas::ObjectRef>>
   decodeReferences(const MCObjectProxy &Node, StringRef &Remaining);
 
 protected:
@@ -249,32 +250,34 @@ class MCSchema final : public RTTIExtends<MCSchema, MCFormatSchemaBase> {
   void anchor() override;
 
 public:
-  static char ID;
-  std::optional<StringRef> getKindString(const cas::ObjectProxy &Node) const;
-  std::optional<unsigned char> getKindStringID(StringRef KindString) const;
+  LLVM_ABI static char ID;
+  LLVM_ABI std::optional<StringRef>
+  getKindString(const cas::ObjectProxy &Node) const;
+  LLVM_ABI std::optional<unsigned char>
+  getKindStringID(StringRef KindString) const;
 
   cas::ObjectRef getRootNodeTypeID() const { return *RootNodeTypeID; }
 
   /// Check if \a Node is a root (entry node) for the schema. This is a strong
   /// check, since it requires that the first reference matches a complete
   /// type-id DAG.
-  bool isRootNode(const cas::ObjectProxy &Node) const override;
+  LLVM_ABI bool isRootNode(const cas::ObjectProxy &Node) const override;
 
   /// Check if \a Node could be a node in the schema. This is a weak check,
   /// since it only looks up the KindString associated with the first
   /// character. The caller should ensure that the parent node is in the schema
   /// before calling this.
-  bool isNode(const cas::ObjectProxy &Node) const override;
+  LLVM_ABI bool isNode(const cas::ObjectProxy &Node) const override;
 
-  Expected<cas::ObjectProxy>
+  LLVM_ABI Expected<cas::ObjectProxy>
   createFromMCAssemblerImpl(llvm::MachOCASWriter &ObjectWriter,
                             llvm::MCAssembler &Asm,
                             raw_ostream *DebugOS) const override;
 
-  Error serializeObjectFile(cas::ObjectProxy RootNode,
-                            raw_ostream &OS) const override;
+  LLVM_ABI Error serializeObjectFile(cas::ObjectProxy RootNode,
+                                     raw_ostream &OS) const override;
 
-  MCSchema(cas::ObjectStore &CAS);
+  LLVM_ABI MCSchema(cas::ObjectStore &CAS);
 
   Expected<MCObjectProxy> create(ArrayRef<cas::ObjectRef> Refs,
                                  StringRef Data) const {

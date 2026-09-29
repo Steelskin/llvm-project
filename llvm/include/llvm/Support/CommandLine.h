@@ -30,6 +30,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/StringSaver.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/VirtualFileSystem.h"
 #include <cassert>
 #include <climits>
 #include <cstddef>

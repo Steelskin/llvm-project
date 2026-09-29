@@ -12,6 +12,7 @@
 #include "llvm/CAS/CASNodeSchema.h"
 #include "llvm/CAS/ObjectStore.h"
 #include "llvm/CAS/TreeEntry.h"
+#include "llvm/Support/Compiler.h"
 
 namespace llvm {
 namespace cas {
@@ -22,17 +23,17 @@ class TreeSchema : public RTTIExtends<TreeSchema, NodeSchema> {
   void anchor() override;
 
 public:
-  static char ID;
+  LLVM_ABI static char ID;
   bool isRootNode(const ObjectProxy &Node) const final {
     return false; // TreeSchema doesn't have a root node.
   }
-  bool isNode(const ObjectProxy &Node) const final;
+  LLVM_ABI bool isNode(const ObjectProxy &Node) const final;
 
-  TreeSchema(ObjectStore &CAS);
+  LLVM_ABI TreeSchema(ObjectStore &CAS);
 
-  size_t getNumTreeEntries(TreeProxy Tree) const;
+  LLVM_ABI size_t getNumTreeEntries(TreeProxy Tree) const;
 
-  Error
+  LLVM_ABI Error
   forEachTreeEntry(TreeProxy Tree,
                    function_ref<Error(const NamedTreeEntry &)> Callback) const;
 
@@ -44,18 +45,19 @@ public:
   ///
   /// Passes the \p TreeNodeProxy if the entry is a \p TreeEntry::Tree,
   /// otherwise passes \p None.
-  Error walkFileTreeRecursively(
+  LLVM_ABI Error walkFileTreeRecursively(
       ObjectStore &CAS, ObjectRef Root,
       function_ref<Error(const NamedTreeEntry &, std::optional<TreeProxy>)>
           Callback);
 
-  std::optional<size_t> lookupTreeEntry(TreeProxy Tree, StringRef Name) const;
-  NamedTreeEntry loadTreeEntry(TreeProxy Tree, size_t I) const;
+  LLVM_ABI std::optional<size_t> lookupTreeEntry(TreeProxy Tree,
+                                                 StringRef Name) const;
+  LLVM_ABI NamedTreeEntry loadTreeEntry(TreeProxy Tree, size_t I) const;
 
-  Expected<TreeProxy> load(ObjectRef Object) const;
-  Expected<TreeProxy> load(ObjectProxy Object) const;
+  LLVM_ABI Expected<TreeProxy> load(ObjectRef Object) const;
+  LLVM_ABI Expected<TreeProxy> load(ObjectProxy Object) const;
 
-  Expected<TreeProxy> create(ArrayRef<NamedTreeEntry> Entries = {});
+  LLVM_ABI Expected<TreeProxy> create(ArrayRef<NamedTreeEntry> Entries = {});
 
 private:
   static constexpr StringLiteral SchemaName = "llvm::cas::schema::tree::v1";
@@ -68,11 +70,11 @@ private:
 
 class TreeProxy : public ObjectProxy {
 public:
-  static Expected<TreeProxy> get(const TreeSchema &Schema,
-                                     Expected<ObjectProxy> Ref);
+  LLVM_ABI static Expected<TreeProxy> get(const TreeSchema &Schema,
+                                          Expected<ObjectProxy> Ref);
 
-  static Expected<TreeProxy> create(TreeSchema &Schema,
-                                        ArrayRef<NamedTreeEntry> Entries);
+  LLVM_ABI static Expected<TreeProxy> create(TreeSchema &Schema,
+                                             ArrayRef<NamedTreeEntry> Entries);
 
   const TreeSchema &getSchema() const { return *Schema; }
 
@@ -94,7 +96,7 @@ public:
     return std::nullopt;
   }
 
-  StringRef getName(size_t I) const;
+  LLVM_ABI StringRef getName(size_t I) const;
 
   NamedTreeEntry get(size_t I) const { return Schema->loadTreeEntry(*this, I); }
 

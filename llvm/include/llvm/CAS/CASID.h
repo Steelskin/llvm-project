@@ -141,7 +141,7 @@ private:
 };
 
 class Cancellable {
-  virtual void anchor();
+  LLVM_ABI virtual void anchor();
 
 public:
   virtual ~Cancellable() {}

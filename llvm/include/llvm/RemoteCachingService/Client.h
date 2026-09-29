@@ -17,6 +17,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/Support/Compiler.h"
 #include "llvm/Support/Error.h"
 #include <atomic>
 #include <memory>
@@ -26,7 +27,7 @@ namespace llvm::cas::remote {
 
 /// Used to optionally associate additional context with a particular request.
 class AsyncCallerContext {
-  virtual void anchor();
+  LLVM_ABI virtual void anchor();
 
 public:
   virtual ~AsyncCallerContext() = default;
@@ -421,13 +422,13 @@ struct ClientServices {
   std::unique_ptr<CASDBClient> CASDB;
 };
 
-Expected<std::unique_ptr<CASDBClient>>
+LLVM_ABI Expected<std::unique_ptr<CASDBClient>>
 createRemoteCASDBClient(StringRef SocketPath);
 
-Expected<std::unique_ptr<KeyValueDBClient>>
+LLVM_ABI Expected<std::unique_ptr<KeyValueDBClient>>
 createRemoteKeyValueClient(StringRef SocketPath);
 
-Expected<ClientServices>
+LLVM_ABI Expected<ClientServices>
 createCompilationCachingRemoteClient(StringRef SocketPath);
 
 } // namespace llvm::cas::remote
