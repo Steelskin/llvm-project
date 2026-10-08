@@ -47,6 +47,9 @@ template <> struct RegionTraits<MachineFunction> {
   }
 };
 
+extern template class LLVM_TEMPLATE_ABI
+    RegionNodeBase<RegionTraits<MachineFunction>>;
+
 class MachineRegionNode : public RegionNodeBase<RegionTraits<MachineFunction>> {
 public:
   inline MachineRegionNode(MachineRegion *Parent, MachineBasicBlock *Entry,
@@ -58,6 +61,9 @@ public:
     return this == reinterpret_cast<const MachineRegionNode *>(&RN);
   }
 };
+
+extern template class LLVM_TEMPLATE_ABI
+    RegionBase<RegionTraits<MachineFunction>>;
 
 class MachineRegion : public RegionBase<RegionTraits<MachineFunction>> {
 public:
@@ -71,13 +77,15 @@ public:
   }
 };
 
-class LLVM_ABI MachineRegionInfo
-    : public RegionInfoBase<RegionTraits<MachineFunction>> {
+extern template class LLVM_TEMPLATE_ABI
+    RegionInfoBase<RegionTraits<MachineFunction>>;
+
+class MachineRegionInfo : public RegionInfoBase<RegionTraits<MachineFunction>> {
 public:
   using Base = RegionInfoBase<RegionTraits<MachineFunction>>;
 
-  explicit MachineRegionInfo();
-  ~MachineRegionInfo() override;
+  LLVM_ABI explicit MachineRegionInfo();
+  LLVM_ABI ~MachineRegionInfo() override;
 
   MachineRegionInfo(MachineRegionInfo &&Arg)
       : Base(std::move(static_cast<Base &>(Arg))) {
@@ -91,14 +99,15 @@ public:
   }
 
   /// Handle invalidation explicitly.
-  bool invalidate(MachineFunction &F, const PreservedAnalyses &PA,
-                  MachineFunctionAnalysisManager::Invalidator &);
+  LLVM_ABI bool invalidate(MachineFunction &F, const PreservedAnalyses &PA,
+                           MachineFunctionAnalysisManager::Invalidator &);
 
   // updateStatistics - Update statistic about created regions.
-  void updateStatistics(MachineRegion *R) final;
+  LLVM_ABI void updateStatistics(MachineRegion *R) final;
 
-  void recalculate(MachineFunction &F, MachineDominatorTree *DT,
-                   MachinePostDominatorTree *PDT, MachineDominanceFrontier *DF);
+  LLVM_ABI void recalculate(MachineFunction &F, MachineDominatorTree *DT,
+                            MachinePostDominatorTree *PDT,
+                            MachineDominanceFrontier *DF);
 };
 
 class LLVM_ABI MachineRegionInfoAnalysis
@@ -212,10 +221,6 @@ struct GraphTraits<MachineRegionInfoPass *>
     return GraphTraits<MachineRegionInfo *>::nodes_end(&RI->getRegionInfo());
   }
 };
-
-extern template class RegionBase<RegionTraits<MachineFunction>>;
-extern template class RegionNodeBase<RegionTraits<MachineFunction>>;
-extern template class RegionInfoBase<RegionTraits<MachineFunction>>;
 
 } // end namespace llvm
 

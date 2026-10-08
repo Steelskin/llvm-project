@@ -901,11 +901,11 @@ public:
 
 extern template class LLVM_TEMPLATE_ABI RegionInfoBase<RegionTraits<Function>>;
 
-class LLVM_ABI RegionInfo : public RegionInfoBase<RegionTraits<Function>> {
+class RegionInfo : public RegionInfoBase<RegionTraits<Function>> {
 public:
   using Base = RegionInfoBase<RegionTraits<Function>>;
 
-  explicit RegionInfo();
+  LLVM_ABI explicit RegionInfo();
 
   RegionInfo(RegionInfo &&Arg) : Base(std::move(static_cast<Base &>(Arg))) {
     updateRegionTree(*this, TopLevelRegion);
@@ -917,29 +917,29 @@ public:
     return *this;
   }
 
-  ~RegionInfo() override;
+  LLVM_ABI ~RegionInfo() override;
 
   /// Handle invalidation explicitly.
-  bool invalidate(Function &F, const PreservedAnalyses &PA,
-                  FunctionAnalysisManager::Invalidator &);
+  LLVM_ABI bool invalidate(Function &F, const PreservedAnalyses &PA,
+                           FunctionAnalysisManager::Invalidator &);
 
   // updateStatistics - Update statistic about created regions.
-  void updateStatistics(Region *R) final;
+  LLVM_ABI void updateStatistics(Region *R) final;
 
-  void recalculate(Function &F, DominatorTree *DT, PostDominatorTree *PDT,
-                   DominanceFrontier *DF);
+  LLVM_ABI void recalculate(Function &F, DominatorTree *DT,
+                            PostDominatorTree *PDT, DominanceFrontier *DF);
 
 #ifndef NDEBUG
   /// Opens a viewer to show the GraphViz visualization of the regions.
   ///
   /// Useful during debugging as an alternative to dump().
-  void view();
+  LLVM_ABI void view();
 
   /// Opens a viewer to show the GraphViz visualization of this region
   /// without instructions in the BasicBlocks.
   ///
   /// Useful during debugging as an alternative to dump().
-  void viewOnly();
+  LLVM_ABI void viewOnly();
 #endif
 };
 

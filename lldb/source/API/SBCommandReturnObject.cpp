@@ -27,21 +27,14 @@ using namespace lldb;
 using namespace lldb_private;
 
 SBCommandReturnObjectImpl::SBCommandReturnObjectImpl()
-    : m_ptr(new CommandReturnObject(false)) {}
+    : m_ptr(new CommandReturnObject(false)), m_owned(true) {}
 
 SBCommandReturnObjectImpl::SBCommandReturnObjectImpl(CommandReturnObject &ref)
     : m_ptr(&ref), m_owned(false) {}
 
 SBCommandReturnObjectImpl::SBCommandReturnObjectImpl(
     const SBCommandReturnObjectImpl &rhs)
-    : m_ptr(new CommandReturnObject(*rhs.m_ptr)), m_owned(rhs.m_owned) {}
-
-SBCommandReturnObjectImpl &
-SBCommandReturnObjectImpl::operator=(const SBCommandReturnObjectImpl &rhs) {
-  SBCommandReturnObjectImpl copy(rhs);
-  std::swap(*this, copy);
-  return *this;
-}
+    : m_ptr(new CommandReturnObject(*rhs.m_ptr)), m_owned(true) {}
 
 SBCommandReturnObjectImpl::~SBCommandReturnObjectImpl() {
   if (m_owned)

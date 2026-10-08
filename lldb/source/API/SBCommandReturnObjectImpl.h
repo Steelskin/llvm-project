@@ -17,14 +17,15 @@ public:
   SBCommandReturnObjectImpl();
   SBCommandReturnObjectImpl(CommandReturnObject &ref);
   SBCommandReturnObjectImpl(const SBCommandReturnObjectImpl &rhs);
-  SBCommandReturnObjectImpl &operator=(const SBCommandReturnObjectImpl &rhs);
+  SBCommandReturnObjectImpl &operator=(const SBCommandReturnObjectImpl &) =
+      delete;
   ~SBCommandReturnObjectImpl();
 
   CommandReturnObject *get() const { return m_ptr; }
 
 private:
   CommandReturnObject *m_ptr;
-  bool m_owned = true;
+  bool m_owned;
 };
 } // namespace lldb_private
 
